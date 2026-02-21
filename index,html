@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultra Pro Max AI Scanner</title>
+<link rel="manifest" href="manifest.json">
+
+<style>
+body{
+margin:0;
+background:#000;
+font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+color:#0ff;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+overflow:hidden;
+}
+
+.container{
+width:95%;
+max-width:420px;
+background:rgba(0,255,255,0.05);
+backdrop-filter:blur(25px);
+border-radius:25px;
+padding:20px;
+box-shadow:0 0 80px rgba(0,255,255,0.3);
+text-align:center;
+}
+
+button{
+margin:5px;
+padding:12px 18px;
+border:none;
+border-radius:20px;
+background:#0ff;
+color:black;
+font-weight:bold;
+cursor:pointer;
+transition:0.3s;
+}
+
+button:hover{
+transform:scale(1.08);
+}
+
+video,canvas{
+width:100%;
+border-radius:15px;
+margin-top:10px;
+display:none;
+}
+
+#result{
+margin-top:10px;
+font-size:14px;
+word-wrap:break-word;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>💀 ULTRA PRO MAX</h2>
+
+<button onclick="startCamera()">Start Camera</button>
+<button onclick="stopCamera()">Stop</button>
+<input type="file" accept="image/*" onchange="importImage(event)">
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<div id="result">Detection: Waiting...</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
+<script>
+let video=document.getElementById("video");
+let canvas=document.getElementById("canvas");
+let ctx=canvas.getContext("2d");
+let result=document.getElementById("result");
+let stream=null;
+let scanning=false;
+
+function startCamera(){
+navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
+.then(s=>{
+stream=s;
+video.srcObject=s;
+video.style.display="block";
+scanning=true;
+requestAnimationFrame(scanFrame);
+});
+}
+
+function stopCamera(){
+scanning=false;
+if(stream){
+stream.getTracks().forEach(track=>track.stop());
+}
+}
+
+function importImage(e){
+let img=new Image();
+img.onload=function(){
+canvas.width=img.width;
+canvas.height=img.height;
+ctx.drawImage(img,0,0);
+canvas.style.display="block";
+detectQR();
+}
+img.src=URL.createObjectURL(e.target.files[0]);
+}
+
+function scanFrame(){
+if(!scanning) return;
+
+canvas.width=video.videoWidth;
+canvas.height=video.videoHeight;
+ctx.drawImage(video,0,0);
+
+enhance();
+detectQR();
+
+requestAnimationFrame(scanFrame);
+}
+
+function enhance(){
+let imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+let data=imgData.data;
+
+for(let i=0;i<data.length;i+=4){
+let avg=(data[i]+data[i+1]+data[i+2])/3;
+let threshold=avg>140?255:0;
+
+data[i]=threshold;
+data[i+1]=threshold;
+data[i+2]=threshold;
+}
+
+ctx.putImageData(imgData,0,0);
+
+ctx.strokeStyle="#0ff";
+ctx.lineWidth=4;
+ctx.strokeRect(canvas.width*0.2,canvas.height*0.2,
+canvas.width*0.6,canvas.height*0.6);
+}
+
+function detectQR(){
+let imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+let code=jsQR(imageData.data,canvas.width,canvas.height);
+
+if(code){
+result.innerText="QR Detected: "+code.data;
+ctx.strokeStyle="lime";
+ctx.lineWidth=6;
+ctx.beginPath();
+ctx.moveTo(code.location.topLeftCorner.x,code.location.topLeftCorner.y);
+ctx.lineTo(code.location.topRightCorner.x,code.location.topRightCorner.y);
+ctx.lineTo(code.location.bottomRightCorner.x,code.location.bottomRightCorner.y);
+ctx.lineTo(code.location.bottomLeftCorner.x,code.location.bottomLeftCorner.y);
+ctx.closePath();
+ctx.stroke();
+}else{
+result.innerText="Detection: Scanning...";
+}
+}
+
+if('serviceWorker' in navigator){
+navigator.serviceWorker.register('service-worker.js');
+}
+</script>
+
+</body>
+</html>
